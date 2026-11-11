@@ -1,0 +1,4 @@
+python-pptx==1.0.2   # 내부 API(Part, relate_to)를 쓰므로 버전 고정
+lxml>=4.9
+Pillow>=9.0
+pymupdf>=1.23        # render(): PDF→PNG (없으면 pdftoppm 사용)

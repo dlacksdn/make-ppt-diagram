@@ -40,7 +40,7 @@ python -c "import pptx_kit; print(pptx_kit.render('/tmp/demo.pptx'))"
 | 파일 | 내용 |
 |---|---|
 | `SKILL.md` | 스킬 설명서: 작업 순서, 고정 규칙, 의미 어휘, 레이아웃, 체크리스트 |
-| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, `list_refs` 등 |
+| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, `list_refs`, 기존 파일용 `copy_diagram`·`safe_save`·`fingerprint` 등 |
 | `base.pptx` | 템플릿 6페이지만 남긴 베이스 |
 | `refs.pptx` | 레퍼런스 그림 13장 (노트에 출처·레이아웃·평가) |
 | `assets/` | 🔥❄️👁️ 아이콘(SVG/PNG), 글자 폭 측정용 폰트 |

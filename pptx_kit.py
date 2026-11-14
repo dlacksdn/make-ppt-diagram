@@ -652,3 +652,142 @@ def render(pptx_path, out_dir=None, dpi=110):
         subprocess.run(["pdftoppm", "-r", str(dpi), "-png", pdf, stem], check=True)
         return sorted(glob.glob(stem + "-*.png"))
 
+
+
+# ───────────────────────── 사용자의 기존 발표 파일에 넣기·고치기 ─────────────────────────
+def fingerprint(path):
+    """파일 지문 (수정 시각 ns, 크기, sha256). 수정 직전·저장 직전 비교용."""
+    import hashlib
+    st = os.stat(path)
+    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    return (st.st_mtime_ns, st.st_size, h)
+
+def is_open_in_powerpoint(path):
+    """PowerPoint가 파일을 열면 같은 폴더에 '~$파일명' 잠금 파일이 생긴다. Windows에서는 쓰기 잠금도 확인."""
+    d, b = os.path.split(os.path.abspath(path))
+    for lock in ("~$" + b, "~$" + b[2:]):
+        if os.path.exists(os.path.join(d, lock)): return True
+    if os.name == "nt":
+        try:
+            with open(path, "r+b"): pass
+        except PermissionError:
+            return True
+    return False
+
+def next_version_path(path):
+    """원본 보존용 새 이름: deck.pptx → deck_v2.pptx → deck_v3.pptx …"""
+    stem, ext = os.path.splitext(path)
+    m = re.match(r"(.*)_v(\d+)$", stem)
+    base, n = (m.group(1), int(m.group(2)) + 1) if m else (stem, 2)
+    while os.path.exists(f"{base}_v{n}{ext}"): n += 1
+    return f"{base}_v{n}{ext}"
+
+def safe_save(prs, src_path, before, out_path=None, overwrite=False):
+    """저장 직전 재확인 후 저장. before = 수정 직전에 잰 fingerprint(src_path).
+       - 그 사이 원본이 바뀌었으면 저장하지 않고 예외 → 처음부터 다시 읽을 것
+       - PowerPoint에서 열려 있으면 저장하지 않고 예외
+       - 기본은 새 버전(_v2 …)으로 저장, 덮어쓰기는 overwrite=True일 때만"""
+    if fingerprint(src_path) != before:
+        raise RuntimeError("원본이 수정 중에 바뀌었습니다 → 저장하지 않음. 최신 파일을 다시 읽고 처음부터 다시 하세요.")
+    if is_open_in_powerpoint(src_path):
+        raise RuntimeError("PowerPoint에서 파일이 열려 있습니다 → 닫아 달라고 요청한 뒤 다시 저장하세요.")
+    out = src_path if overwrite else (out_path or next_version_path(src_path))
+    prs.save(out)
+    return out
+
+def _base_ids():
+    """base.pptx 슬라이드의 템플릿 원형 요소 id. kit 요소는 항상 이보다 큰 id를 받으므로 id로 구분한다
+       (header()가 머리글 위치를 바꿔도 구분이 흔들리지 않음)"""
+    p = Presentation(os.path.join(HERE, "base.pptx"))
+    ids = set()
+    for el in list(p.slides[0].shapes._spTree)[2:]:
+        v = X(el, ".//p:cNvPr/@id")
+        if v: ids.add(v[0])
+    return ids
+
+def _find_user_base(slide):
+    """대상 슬라이드에서 사용자가 깐 회색 베이스(bg1 85%, 폭 10in 이상)를 찾는다 → (x, y, w, h) in"""
+    for sp in slide.shapes:
+        xml = etree.tostring(sp._element).decode()
+        if 'val="bg1"><a:lumMod val="85000"' in xml and sp.width and sp.width > E(10):
+            return (sp.left / EMU, sp.top / EMU, sp.width / EMU, sp.height / EMU)
+    return None
+
+def _has_frame(slide):
+    """템플릿 틀(바닥글 'Robot Intelligence Learning & System')이 있는가"""
+    return any(sp.has_text_frame and "Robot Intelligence Learning" in sp.text_frame.text for sp in slide.shapes)
+
+def _is_base_rect(el):
+    xml = etree.tostring(el).decode()
+    ext = X(el, "./p:spPr/a:xfrm/a:ext")
+    return 'val="bg1"><a:lumMod val="85000"' in xml and ext and int(ext[0].get("cx")) > E(10)
+
+def copy_diagram(src_slide, dst_slide, align_to_base=True, dx=0.0, dy=0.0, ensure_base=True, ensure_frame=True):
+    """kit로 만든 슬라이드(src)에서 다이어그램 요소만 대상 슬라이드(dst)로 복사한다.
+       - 템플릿 원형 요소(base 6p 복제분: 베이스·머리글·로고·쪽번호)는 건너뛴다
+       - 대상에 베이스가 없으면 (ensure_base) kit 베이스를 맨 아래에 깐다
+         대상에 템플릿 틀(머리글·로고·바닥글)까지 없으면 (ensure_frame) 틀 전체를 맨 아래에 깐다
+       - cNvPr id는 대상 슬라이드 최대값 다음부터 새로 매긴다 (수식 Choice/Fallback 쌍은 같은 id 유지)
+       - 아이콘·로고 이미지 관계를 대상 슬라이드에 다시 연결한다 (대상 파일 안에 새 이름으로 복제)
+       - align_to_base: 대상 베이스 위치가 kit BASE와 다르면 그만큼 평행 이동
+       대상 슬라이드의 기존 요소는 건드리지 않는다.
+       반환: {"copied": 다이어그램 요소 수, "added_base": bool, "added_frame": bool} → 깐 것이 있으면 사용자에게 알린다"""
+    base_ids = _base_ids()
+    items, frame = [], []
+    for el in list(src_slide.shapes._spTree)[2:]:
+        v = X(el, ".//p:cNvPr/@id")
+        (frame if v and v[0] in base_ids else items).append(copy.deepcopy(el))
+    ub = _find_user_base(dst_slide)
+    added_base = added_frame = False
+    under = []                                  # 맨 아래(기존 요소보다 뒤)에 깔 요소
+    if ub is None and ensure_frame and not _has_frame(dst_slide):
+        under = frame; added_base = added_frame = True
+    elif ub is None and ensure_base:
+        under = [el for el in frame if _is_base_rect(el)]; added_base = bool(under)
+    # 위치 보정 (사용자 베이스가 있을 때만)
+    if align_to_base and ub:
+        dx += ub[0] - BASE[0]; dy += ub[1] - BASE[1]
+        if abs(ub[2] - BASE[2]) > 0.05 or abs(ub[3] - BASE[3]) > 0.05:
+            print(f"주의: 대상 베이스 크기 {ub[2]:.3f}×{ub[3]:.3f} in ≠ kit {BASE[2]:.3f}×{BASE[3]:.3f} in → 넘치는지 렌더링으로 확인")
+    if dx or dy:
+        for el in items:
+            for xf in X(el, "./p:spPr/a:xfrm | ./p:grpSpPr/a:xfrm | ./mc:Choice/p:sp/p:spPr/a:xfrm | ./mc:Fallback/p:sp/p:spPr/a:xfrm"):
+                o = xf.find("a:off", NS); o.set("x", str(int(o.get("x")) + E(dx))); o.set("y", str(int(o.get("y")) + E(dy)))
+                co = xf.find("a:chOff", NS)
+                if co is not None: co.set("x", str(int(co.get("x")) + E(dx))); co.set("y", str(int(co.get("y")) + E(dy)))
+    # id 재지정
+    used = [int(v) for v in X(dst_slide.shapes._spTree, ".//p:cNvPr/@id")]
+    nxt = max(used + [1]) + 1; idmap = {}
+    for el in under + items:
+        for c in X(el, ".//p:cNvPr"):
+            old = c.get("id")
+            if old not in idmap: idmap[old] = str(nxt); nxt += 1
+            c.set("id", idmap[old])
+        for c in X(el, ".//a:stCxn | .//a:endCxn"):
+            if c.get("id") in idmap: c.set("id", idmap[c.get("id")])
+    # 이미지 관계 재연결
+    R_E = "{%s}embed" % NS["r"]
+    remap = {}
+    for el in under + items:
+        for node in el.iter():
+            rid = node.get(R_E)
+            if not rid: continue
+            if rid not in remap:   # 이미지 파트를 대상 파일 안에 새 이름으로 복제해 연결 (이름 충돌 방지)
+                t = src_slide.part.rels[rid]._target; pkg = dst_slide.part.package
+                ext = str(t.partname).rsplit(".", 1)[-1]
+                newp = Part(pkg.next_partname("/ppt/media/image%d." + ext), t.content_type, pkg, t.blob)
+                remap[rid] = dst_slide.part.relate_to(newp, RT.IMAGE)
+            node.set(R_E, remap[rid])
+    tree = dst_slide.shapes._spTree
+    for k, el in enumerate(under): tree.insert(2 + k, el)   # nvGrpSpPr, grpSpPr 바로 다음 = 맨 아래
+    tree.extend(items)
+    if added_frame:
+        # 쪽 번호를 이 슬라이드의 실제 위치로 맞춘다 (kit 슬라이드의 번호가 따라오므로)
+        try:
+            prs = dst_slide.part.package.presentation_part.presentation
+            Slide(None, dst_slide).page(prs.slides.index(dst_slide) + 1)
+        except Exception as e:
+            print("쪽 번호 자동 설정 실패 → 직접 확인:", e)
+        print("대상 슬라이드에 템플릿 틀이 없어 틀 전체(베이스·머리글·로고·바닥글·쪽번호)를 깔았습니다 → 머리글 텍스트 확인")
+    elif added_base: print("대상 슬라이드에 베이스가 없어 kit 베이스를 깔았습니다")
+    return {"copied": len(items), "added_base": added_base, "added_frame": added_frame}

@@ -1,7 +1,14 @@
 # make-ppt-diagram
 
-논문 방법론 그림(Claude가 그린 시각화 또는 태블릿 손그림)을 **RILS LAB 세미나 템플릿** 위의 **편집 가능한 PowerPoint 다이어그램**으로 옮기는 Claude 스킬입니다.
-스타일 수치(pt, 선 두께, 간격, 색 역할)는 `pptx_kit.py`에 상수로 들어 있습니다. 규칙과 작업 순서는 `SKILL.md`에 있습니다.
+논문 방법론 다이어그램을 **RILS LAB 세미나 템플릿** 위에 그리는 Claude 스킬입니다. 두 모드가 있고, 요청한 모드만 실행합니다.
+
+| 모드 | 호출 예 | 입력 → 출력 |
+|---|---|---|
+| 🅐 그리기 | "방법론 그려줘", "도식화해줘" | 논문 + 공식 코드 → phase 분할 합의 → **PNG** |
+| 🅑 PPT | "PPT로 만들어줘" | 🅐의 그림 또는 손그림 → **편집 가능한 .pptx** |
+
+두 모드 모두 같은 kit(`pptx_kit.py`)로 그리므로, 🅐에서 그린 그림은 손실 없이 .pptx가 됩니다.
+스타일 수치(pt, 선 두께, 간격, 색 역할)는 `pptx_kit.py`에 상수로 들어 있고, 절차와 규칙은 `SKILL.md`에 있습니다.
 
 ## 설치
 
@@ -40,4 +47,4 @@ python -c "import pptx_kit; print(pptx_kit.render('/tmp/demo.pptx'))"
 
 ## 라이선스 참고
 - `assets/fonts/`: Carlito, Caladea — SIL Open Font License 1.1 (각 `LICENSE-*.txt`)
-- `base.pptx`, `refs.pptx`: 연구실 템플릿·로고와 세미나 자료가 들어 있습니다. 공개 저장소로 올리기 전에 확인이 필요합니다.
+- `base.pptx`, `refs.pptx`: 연구실 템플릿·로고와 세미나 자료가 들어 있습니다.

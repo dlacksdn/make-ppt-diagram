@@ -418,7 +418,7 @@ class Slide:
         x, y = cx - w / 2, cy - h / 2
         tc = MUTED if muted else None
         def draw(g):
-            self.rect(x, y, w, h, fill=fill, dash=dash, line_color=line_color, prst=SHAPE[shape], parent=g, name=f"Box {key}")
+            self.rect(x, y, w, h, fill=fill, dash=dash, line_color=line_color, prst=SHAPE.get(shape, shape), parent=g, name=f"Box {key}")
             if subs:
                 ty = y + 0.12
                 self.text(cx - ic / 2, ty, title, title_pt, True, color=tc, anchor="tc", align="c", parent=g)

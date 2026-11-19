@@ -40,11 +40,11 @@ python -c "import pptx_kit; print(pptx_kit.render('/tmp/demo.pptx'))"
 | 파일 | 내용 |
 |---|---|
 | `SKILL.md` | 스킬 설명서: 작업 순서, 고정 규칙, 의미 어휘, 레이아웃, 체크리스트 |
-| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, `list_refs`, 기존 파일용 `copy_diagram`·`safe_save`·`fingerprint` 등 |
+| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, 레퍼런스용 `list_refs`·`add_refs`, 기존 파일용 `copy_diagram`·`safe_save`·`fingerprint` 등 |
 | `base.pptx` | 템플릿 6페이지만 남긴 베이스 |
-| `refs.pptx` | 레퍼런스 그림 13장 (노트에 출처·레이아웃·평가) |
+| `refs/` | 레퍼런스: `kit_*.pptx`(kit 규칙 준수, 수치까지 참고) · `legacy_seminars.pptx`(구성만 참고). 발표 1개 = 파일 1개 |
 | `assets/` | 🔥❄️👁️ 아이콘(SVG/PNG), 글자 폭 측정용 폰트 |
 
 ## 라이선스 참고
 - `assets/fonts/`: Carlito, Caladea — SIL Open Font License 1.1 (각 `LICENSE-*.txt`)
-- `base.pptx`, `refs.pptx`: 연구실 템플릿·로고와 세미나 자료가 들어 있습니다.
+- `base.pptx`, `refs/`: 연구실 템플릿·로고와 세미나 자료가 들어 있습니다.

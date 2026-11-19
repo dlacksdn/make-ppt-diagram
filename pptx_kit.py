@@ -601,15 +601,52 @@ def open_deck(template=None):
     d = Deck(template); d.snapshot_base(); return d
 
 
-def list_refs(path=None):
-    """refs.pptx 슬라이드 노트로 레퍼런스 목록 출력 → 구조가 가장 비슷한 장을 골라 렌더링해서 연다"""
-    path = path or os.path.join(HERE, "refs.pptx")
-    if not os.path.exists(path):
-        print("refs.pptx 없음 — SKILL.md 레이아웃 표의 원본 발표 파일을 참조"); return []
+def list_refs(query=None, folder=None):
+    """refs/ 폴더의 레퍼런스 목록을 슬라이드 노트로 출력한다. 반환: [(파일 경로, 슬라이드 번호, 노트)]
+       query: 노트 검색어 (문자열 또는 목록, 하나라도 들어 있으면 표시) — 예: list_refs("단계적 빌드"), list_refs(["좌우", "분기"])
+       - kit_*.pptx  : kit 규칙으로 만든 발표 → 구성·장치·수치까지 참고 (먼저, 최신 날짜부터)
+       - legacy_*.pptx : 옛 발표 → 구성·장치만 참고 (베이스·선 두께·글자 크기가 kit와 다를 수 있음)
+       구조가 가장 비슷한 장을 골라 render()로 열어 본다."""
+    import glob
+    folder = folder or os.path.join(HERE, "refs")
+    files = sorted(glob.glob(os.path.join(folder, "kit_*.pptx")), reverse=True) + \
+            sorted(glob.glob(os.path.join(folder, "legacy_*.pptx")))
+    if not files:
+        print("refs/ 폴더에 레퍼런스가 없음"); return []
     out = []
-    for i, sl in enumerate(Presentation(path).slides, 1):
-        note = sl.notes_slide.notes_text_frame.text if sl.has_notes_slide else ""
-        out.append((i, note)); print(f"{i:>2}. {note}")
+    for f in files:
+        tag = "kit (수치까지 참고)" if os.path.basename(f).startswith("kit_") else "legacy (구성만 참고)"
+        print(f"\n■ {os.path.basename(f)} — {tag}")
+        qs = [query] if isinstance(query, str) else (query or [])
+        shown = 0
+        for i, sl in enumerate(Presentation(f).slides, 1):
+            note = sl.notes_slide.notes_text_frame.text if sl.has_notes_slide else ""
+            if qs and not any(q.lower() in note.lower() for q in qs): continue
+            out.append((f, i, note)); print(f"  {i:>2}. {note}"); shown += 1
+        if qs and not shown: print("  (해당 없음)")
+    return out
+
+
+def add_refs(src_pptx, slides, notes, name, folder=None):
+    """발표 파일에서 고른 슬라이드를 refs/<name>.pptx로 저장한다 (발표 1개 = 파일 1개).
+       slides: 1부터 세는 슬라이드 번호 목록 / notes: {번호: 노트} — 노트 형식은 SKILL.md '레퍼런스 추가' 참조
+       name: 'kit_YYYY-MM-DD_발표' (kit 규칙으로 만든 발표) 또는 'legacy_…' (옛 발표)
+       원본 발표 파일은 건드리지 않는다. 같은 이름이 있으면 덮어쓰지 않고 예외."""
+    if not re.match(r"^(kit|legacy)_", name):
+        raise ValueError("이름은 kit_ 또는 legacy_ 로 시작해야 합니다")
+    folder = folder or os.path.join(HERE, "refs"); os.makedirs(folder, exist_ok=True)
+    out = os.path.join(folder, name + ".pptx")
+    if os.path.exists(out):
+        raise FileExistsError(f"{out} 이미 있음 → 같은 발표에서 더 고르는 경우 그 파일에 이어 붙이도록 슬라이드 목록을 합쳐 다시 만드세요")
+    missing = [k for k in slides if not notes.get(k)]
+    if missing: raise ValueError(f"노트가 없는 슬라이드: {missing} — 노트가 있어야 list_refs()로 찾을 수 있습니다")
+    prs = Presentation(src_pptx); lst = prs.slides._sldIdLst; keep = set(slides)
+    R = "{%s}id" % NS["r"]
+    for k, sid in enumerate(list(lst), 1):
+        if k not in keep: prs.part.drop_rel(sid.get(R)); lst.remove(sid)
+    for k, sl in zip(sorted(keep), prs.slides):
+        sl.notes_slide.notes_text_frame.text = notes[k]
+    prs.save(out); print("saved", out, f"({len(prs.slides)}장)")
     return out
 
 

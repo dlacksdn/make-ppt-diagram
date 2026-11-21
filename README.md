@@ -40,7 +40,7 @@ python -c "import pptx_kit; print(pptx_kit.render('/tmp/demo.pptx'))"
 | 파일 | 내용 |
 |---|---|
 | `SKILL.md` | 스킬 설명서: 작업 순서, 고정 규칙, 의미 어휘, 레이아웃, 체크리스트 |
-| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, 레퍼런스용 `list_refs`·`add_refs`, 기존 파일용 `copy_diagram`·`safe_save`·`fingerprint` 등 |
+| `pptx_kit.py` | 다이어그램 키트: `open_deck`, `box`, `arrow`, `panel`, `legend`, `render`, 단계적 빌드용 `build_steps`·`step_style`·`marker`, 레퍼런스용 `list_refs`·`add_refs`, 기존 파일용 `copy_diagram`·`safe_save`·`fingerprint` 등 |
 | `base.pptx` | 템플릿 6페이지만 남긴 베이스 |
 | `refs/` | 레퍼런스: `kit_*.pptx`(kit 규칙 준수, 수치까지 참고) · `legacy_seminars.pptx`(구성만 참고). 발표 1개 = 파일 1개 |
 | `assets/` | 🔥❄️👁️ 아이콘(SVG/PNG), 글자 폭 측정용 폰트 |

@@ -151,7 +151,10 @@ def _tokens(s):
     while i < len(s):
         c = s[i]
         if c == "\\":
-            m = re.match(r"\\([A-Za-z]+)", s[i:]); name = m.group(1); i += len(m.group(0))
+            m = re.match(r"\\([A-Za-z]+)", s[i:])
+            if not m:          # 남는 역슬래시(\\, 이스케이프 실수)는 무시한다
+                i += 1; continue
+            name = m.group(1); i += len(m.group(0))
             out.append(("cmd", name))
         elif c in "{}_^": out.append((c, c)); i += 1
         elif c == " ": i += 1
@@ -510,10 +513,24 @@ class Slide:
                 self.text(x + 0.55, yy + 0.19, lab[kind], PT_BOX_SUB, anchor="cl", parent=g)
         self.group(draw, name="Legend")
 
+    def marker(self, n, x, y, d=0.32):
+        """단계적 빌드의 빨간 번호 마커 ①②③… (x, y) = 중심. 상자 왼쪽 위 모서리에 붙이는 것이 기본"""
+        def draw(g):
+            self.rect(x - d / 2, y - d / 2, d, d, fill=RED, line=False, prst="ellipse", parent=g, name=f"Step {n}")
+            self.text(x, y, str(n), PT_EDGE, True, color="FFFFFF", anchor="cc", align="c", parent=g)
+        self.group(draw, name=f"Step marker {n}")
+
     def verdict(self, s, y=None):
         """하단 총평 문장 — 베이스 하단 중앙, 24pt"""
         bx, by, bw, bh = BASE
         return self.text(bx + bw / 2, y if y is not None else by + bh - MARGIN / 2, s, PT_VERDICT, anchor="bc", align="c")
+
+
+def step_style(step, k):
+    """단계적 빌드에서 요소가 등장한 단계(step)와 현재 장(k)을 받아 스타일을 돌려준다.
+       이번 장에 처음 나온 요소 → 빨간 테두리, 이전 장부터 있던 요소 → 기본.
+       사용: s.box("x", ..., **step_style(3, k))  (k < step이면 그리지 않는다)"""
+    return {"line_color": RED} if step == k else {}
 
 
 class Deck:
@@ -560,6 +577,20 @@ class Deck:
                 v = el.get(attr)
                 if v in remap: el.set(attr, remap[v])
         sl = Slide(self, new); self.slides.append(sl); return sl
+
+    def build_steps(self, draw, n, header=None, page_start=None):
+        """애니메이션 대신 쓰는 단계적 빌드: 같은 그림을 n장으로 쌓는다.
+           draw(slide, k): k번째 장에 '등장 단계 ≤ k'인 요소를 모두 그린다 (배치는 매 장 동일하게).
+           새 요소 강조는 step_style(step, k), 순서 번호는 slide.marker(n, x, y).
+           PowerPoint 애니메이션 효과는 쓰지 않는다 — PDF·PNG·인쇄에서도 순서가 남게 하려고.
+           반환: 만든 Slide 목록 (render()하면 단계별 PNG가 나온다)"""
+        out = []
+        for k in range(1, n + 1):
+            sl = self.new_slide()
+            if header: sl.header(header)
+            if page_start is not None: sl.page(page_start + k - 1)
+            draw(sl, k); out.append(sl)
+        return out
 
     def snapshot_base(self):
         tree = self._base.shapes._spTree
